@@ -15,6 +15,12 @@ public class PageWrapper <T>{
 
     private int pageStartNum;
 
+    private Long totalCount;
+
+    public Long getTotalCount() {
+        return page.getTotalElements();
+    }
+
     public int getPageStartNum() {
         return (int) page.getTotalElements() - (page.getNumber() * page.getSize());
     }

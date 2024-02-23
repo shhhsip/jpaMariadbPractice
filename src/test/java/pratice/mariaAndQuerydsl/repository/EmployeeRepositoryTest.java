@@ -107,5 +107,20 @@ class EmployeeRepositoryTest {
         }
     }
 
+    @Test
+    public void searchPageSearchParamCount() throws Exception{
+        PageRequest pageRequest = PageRequest.of(0, 1000);
+        EmployeeCondition condition = new EmployeeCondition();
+        condition.setSex(SexType.M);
+        condition.setParamCount(1000L);
+
+
+        Page<EmployeeDepartmentPayDto> search = employeeRepository.searchPage(condition, pageRequest);
+
+        System.out.println("search = " + search.getSize());
+
+        assertThat(search).size().isEqualTo(1000);
+    }
+
 
 }

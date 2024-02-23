@@ -1,7 +1,9 @@
 package pratice.mariaAndQuerydsl.repository;
 
 import com.querydsl.core.BooleanBuilder;
+import com.querydsl.core.types.Projections;
 import com.querydsl.core.types.dsl.BooleanExpression;
+import com.querydsl.core.types.dsl.Expressions;
 import com.querydsl.core.types.dsl.Wildcard;
 import com.querydsl.jpa.impl.JPAQuery;
 import com.querydsl.jpa.impl.JPAQueryFactory;
@@ -100,24 +102,34 @@ public class EmployeeRepositoryImpl implements EmployeeRepositoryCustom {
                 .limit(pageable.getPageSize())
                 .fetch();
 
-        JPAQuery<Long> pagingQuery = queryFactory
-                .select(
-                        employee.count()
-                )
-                .from(employee)
-                .join(department).on(
-                        employee.id.eq(employeeDepartment.employee.id),
-                        employeeDepartment.end_date.eq(LocalDate.of(9999, 1, 1))
-                )
-                .join(employee.pays, pay).on(
-                        pay.use_yn.eq('1')
-                )
-                .where(
-                        allSearch(condition)
-                );
+        /**
+         * 첫 페이지 이후에 파라미터 값으로 카운트 쿼리 대체
+         */
+        JPAQuery<Long> countQuery = null;
+        if(condition.getParamCount() > 0){
+            countQuery = queryFactory
+                    .select(Expressions.constant(condition.getParamCount()))
+                    .from(employee)
+                    .limit(1);
+        }else {
+            countQuery = queryFactory
+                    .select(
+                            employee.count()
+                    )
+                    .from(employee)
+                    .join(department).on(
+                            employee.id.eq(employeeDepartment.employee.id),
+                            employeeDepartment.end_date.eq(LocalDate.of(9999, 1, 1))
+                    )
+                    .join(employee.pays, pay).on(
+                            pay.use_yn.eq('1')
+                    )
+                    .where(
+                            allSearch(condition)
+                    );
+        }
 
-
-        return PageableExecutionUtils.getPage(content, pageable, pagingQuery::fetchOne);
+        return PageableExecutionUtils.getPage(content, pageable, countQuery::fetchOne);
     }
 
 
@@ -171,14 +183,6 @@ public class EmployeeRepositoryImpl implements EmployeeRepositoryCustom {
         } catch (IllegalArgumentException e) {
             return new BooleanBuilder();
         }
-    }
-
-    private JPAQuery<Long> testPaging(JPAQuery<Long> countQuery, Pageable pageable) {
-        long count = countQuery.offset(0).limit(120).stream().count();
-        if(count > 100) {
-            System.out.println("5페이지 이상 count = " + count);
-        }
-        return countQuery.select(count(Wildcard.all)).select(employee.id).offset(0).limit(120);
     }
 
 
