@@ -12,4 +12,6 @@ public interface EmployeeRepositoryCustom {
 
     List<EmployeeDepartmentPayDto> search(EmployeeCondition condition);
     Page<EmployeeDepartmentPayDto> searchPage(EmployeeCondition condition, Pageable pageable);
+
+    Page<EmployeeDepartmentPayDto> searchPage2(EmployeeCondition condition, Pageable pageable);
 }

@@ -29,4 +29,16 @@ public class MemberContorller {
         return "index";
     }
 
+    @GetMapping("/index2")
+    public String memberList2(Model model, EmployeeCondition condition, Pageable pageable) {
+        Page<EmployeeDepartmentPayDto> employeeList = employeeRepository.searchPage2(condition, pageable);
+        PageWrapper<EmployeeDepartmentPayDto> page = new PageWrapper<>(employeeList);
+
+        model.addAttribute("page", page);
+        model.addAttribute("pageStartNum", page.getPageStartNum());
+        model.addAttribute("boardList", employeeList);
+
+        return "index";
+    }
+
 }

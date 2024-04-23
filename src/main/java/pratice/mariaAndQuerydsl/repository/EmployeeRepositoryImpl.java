@@ -12,14 +12,15 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.support.PageableExecutionUtils;
 import org.springframework.util.StringUtils;
-import pratice.mariaAndQuerydsl.dto.EmployeeCondition;
-import pratice.mariaAndQuerydsl.dto.EmployeeDepartmentPayDto;
-import pratice.mariaAndQuerydsl.dto.QEmployeeDepartmentPayDto;
+import pratice.mariaAndQuerydsl.dto.*;
 import pratice.mariaAndQuerydsl.entity.*;
 
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Map;
+import java.util.Optional;
 import java.util.function.Supplier;
+import java.util.stream.Collectors;
 
 import static com.querydsl.core.types.ExpressionUtils.count;
 import static pratice.mariaAndQuerydsl.entity.QDepartment.*;
@@ -74,8 +75,11 @@ public class EmployeeRepositoryImpl implements EmployeeRepositoryCustom {
      *  4. 테이블 설정 변경 및 추가 -> 현재 재직 구분값인 employeeDepartment테이블의 end_date와
      *  현재 연봉 관련 pay테이블의 use_yn = 1 값을 가진 테이블 생성 후 관리
      */
+
     @Override
     public Page<EmployeeDepartmentPayDto> searchPage(EmployeeCondition condition, Pageable pageable) {
+
+        // 1800~2400ms
         List<EmployeeDepartmentPayDto> content = queryFactory
                 .select(new QEmployeeDepartmentPayDto(
                         employee.id.as("employee_id"),
@@ -104,6 +108,7 @@ public class EmployeeRepositoryImpl implements EmployeeRepositoryCustom {
 
         /**
          * 첫 페이지 이후에 파라미터 값으로 카운트 쿼리 대체
+         * 1000ms
          */
         JPAQuery<Long> countQuery = null;
         if(condition.getParamCount() > 0){
@@ -131,6 +136,96 @@ public class EmployeeRepositoryImpl implements EmployeeRepositoryCustom {
 
         return PageableExecutionUtils.getPage(content, pageable, countQuery::fetchOne);
     }
+
+
+    /**
+     * employee_id 값 조회후 in절로 pay테이블 조회 후 salary 데이터 set
+     * searchPage보다 최대 1.5초 감소 -> 1.9초
+     */
+    public Page<EmployeeDepartmentPayDto> searchPage2(EmployeeCondition condition, Pageable pageable) {
+
+        // 0ms~1ms
+        List<EmployeeDepartmentPayDto> content = queryFactory
+                .select(new QEmployeeDepartmentPayDto(
+                        employee.id.as("employee_id"),
+                        department.name.as("department_name"),
+                        /*employee.sex,*/
+                        employee.birth_date,
+                        employee.first_name,
+                        employee.last_name
+                ))
+                .from(employee)
+                .join(department).on(
+                        employee.id.eq(employeeDepartment.employee.id),
+                        employeeDepartment.end_date.eq(LocalDate.of(9999, 1, 1))
+                )
+                .groupBy(employee.id)
+                .where(
+                        allSearch(condition)
+                )
+                .offset(pageable.getOffset())
+                .limit(pageable.getPageSize())
+                .fetch();
+
+        /**
+         * pay테이블에서 따로 조회 900ms
+         */
+        List<Long> collect = content.stream()
+                .map(EmployeeDepartmentPayDto::getEmployee_id)
+                .collect(Collectors.toList());
+
+        List<PayDto> fetch = queryFactory
+                .select(new QPayDto(
+                        pay.employee.id,
+                        pay.salary
+                ))
+                .from(pay)
+                .where(
+                        pay.use_yn.eq('1')
+                                .and(pay.employee.id.in(collect))
+                ).fetch();
+
+        Map<Long, Long> isToSalary =
+                fetch.stream().collect(Collectors.toMap(PayDto::getEmployee_id, PayDto::getSalary));
+
+        content.forEach(dto -> dto.setSalary(
+                Optional.ofNullable(isToSalary.get(dto.getEmployee_id())).orElse(dto.getSalary())
+        ));
+
+
+
+        /**
+         * 첫 페이지 이후에 파라미터 값으로 카운트 쿼리 대체
+         * 1000ms
+         */
+        JPAQuery<Long> countQuery = null;
+        if(condition.getParamCount() > 0){
+            countQuery = queryFactory
+                    .select(Expressions.constant(condition.getParamCount()))
+                    .from(employee)
+                    .limit(1);
+        }else {
+            countQuery = queryFactory
+                    .select(
+                            employee.count()
+                    )
+                    .from(employee)
+                    .join(department).on(
+                            employee.id.eq(employeeDepartment.employee.id),
+                            employeeDepartment.end_date.eq(LocalDate.of(9999, 1, 1))
+                    )
+                    .join(employee.pays, pay).on(
+                            pay.use_yn.eq('1')
+                    )
+                    .where(
+                            allSearch(condition)
+                    );
+        }
+
+        return PageableExecutionUtils.getPage(content, pageable, countQuery::fetchOne);
+    }
+
+
 
 
 
